@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Joc de ruleta de casino interactiu per aprendre sobre probabilitats i estadística. Inclou pregunta tipus test sobre la falàcia del jugador.">
+    <meta name="keywords" content="ruleta, casino, probabilitat, estadística, educatiu, joc">
+    <title>Ruleta Casino</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Ruleta Casino</h1>
+        <p>Selecciona la teva fitxa i fes la teva aposta</p>
+    </header>
+
+    <section class="contenedor">
+        <div class="ruleta-contenedor">
+            <div class="ruleta" id="ruleta"></div>
+            <div class="numero-ganador" id="numero-ganador"></div>
+        </div>
+
+        <div class="panel-juego">
+            <div class="balance">
+                <p>Balanç</p>
+                <p id="balance">50.00€</p>
+            </div>
+
+            <div class="contador-tiradas">
+                <p>Tirades</p>
+                <p id="tiradas">0</p>
+            </div>
+
+            <div class="fichas">
+                <p>Selecciona la teva fitxa</p>
+                <button class="ficha activa" data-valor="0.20" onclick="seleccionarFicha(0.20)">0.20€</button>
+                <button class="ficha" data-valor="0.50" onclick="seleccionarFicha(0.50)">0.50€</button>
+                <button class="ficha" data-valor="1" onclick="seleccionarFicha(1)">1€</button>
+                <button class="ficha" data-valor="5" onclick="seleccionarFicha(5)">5€</button>
+            </div>
+
+            <div class="apuestas">
+                <p><strong>Selecciona la teva aposta</strong></p>
+                
+                <div class="tabs">
+                    <button class="tab activa" onclick="cambiarTab('numero')">Número</button>
+                    <button class="tab" onclick="cambiarTab('color')">Color</button>
+                </div>
+
+                <div id="tab-numero" class="tab-content activo">
+                    <p>Selecciona un número del 0 al 36 (paga 36x)</p>
+                    <div id="numeros-grid"></div>
+                </div>
+
+                <div id="tab-color" class="tab-content">
+                    <p>Selecciona un color (paga 2x)</p>
+                    <div class="colores">
+                        <button class="color-btn vermell" onclick="seleccionarColor('vermell', this)">🔴 VERMELL</button>
+                        <button class="color-btn negre" onclick="seleccionarColor('negre', this)">⚫ NEGRE</button>
+                    </div>
+                </div>
+            </div>
+
+            <button class="boton-girar" id="btn-girar" onclick="girarRuleta()">Girar Ruleta</button>
+            <button class="boton-limpiar" onclick="limpiarApuestas()">Netejar</button>
+
+            <div class="resultado" id="resultado"></div>
+        </div>
+    </section>
+
+    <div class="modal-pregunta" id="modal-pregunta">
+        <div class="pregunta-contenido">
+            <h2>🎲 Et jugaries una altra tirada?</h2>
+            <p class="pregunta-texto">Després de 9 vermells seguits... què penses que passarà ara?</p>
+            <div class="opciones">
+                <button class="opcion-btn" onclick="responderPregunta('a')">a) Tornarà a sortir vermell, estic en ratxa!</button>
+                <button class="opcion-btn" onclick="responderPregunta('b')">b) Ja toca negre, segur</button>
+                <button class="opcion-btn" onclick="responderPregunta('c')">c) Tenen exactament la mateixa probabilitat</button>
+                <button class="opcion-btn" onclick="responderPregunta('d')">d) Sorpresa! Segur que surt verd</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="pantalla-final" id="pantalla-final">
+        <div class="mensaje-final">
+            <h2>Moltes gràcies per la participació</h2>
+            <p class="recordatori">Recorda bé el que has escollit a la pregunta tipus test i el resultat que ha ocorregut</p>
+            <div class="info-final" id="info-final"></div>
+        </div>
+    </div>
+
+    <script>
+        const vermells = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+        const negres = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+
+        let balance = 50;
+        let fichaSeleccionada = 0.20;
+        let tabActiva = 'numero';
+        let numeroSeleccionado = null;
+        let colorSeleccionado = null;
+        let girando = false;
+        let contadorTiradas = 0;
+
+        function getColorNumero(num) {
+            if (num === 0) return 'verd';
+            if (vermells.includes(num)) return 'vermell';
+            if (negres.includes(num)) return 'negre';
+        }
+
+        function crearRuleta() {
+            const ruleta = document.getElementById('ruleta');
+            
+            for (let i = 0; i < 37; i++) {
+                const sector = document.createElement('div');
+                sector.className = 'sector';
+                
+                const num = i % 37;
+                const color = getColorNumero(num);
+                sector.classList.add(color);
+                
+                const angulo = (360 / 37) * i;
+                sector.style.transform = `rotate(${angulo}deg)`;
+                
+                ruleta.appendChild(sector);
+            }
+        }
+
+        function crearGridNumeros() {
+            const grid = document.getElementById('numeros-grid');
+
+            for (let i = 0; i <= 36; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'numero-btn ' + getColorNumero(i);
+                btn.textContent = i;
+                btn.onclick = function() { seleccionarNumero(parseInt(this.textContent), this); };
+                grid.appendChild(btn);
+            }
+        }
+
+        function seleccionarFicha(valor) {
+            fichaSeleccionada = valor;
+            document.querySelectorAll('.ficha').forEach(f => f.classList.remove('activa'));
+            document.querySelector(`.ficha[data-valor="${valor}"]`).classList.add('activa');
+        }
+
+        function cambiarTab(tab) {
+            tabActiva = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('activa'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('activo'));
+            event.target.classList.add('activa');
+            document.getElementById(`tab-${tab}`).classList.add('activo');
+            limpiarSelecciones();
+        }
+
+        function seleccionarNumero(num, elemento) {
+            if (tabActiva !== 'numero') return;
+            document.querySelectorAll('.numero-btn').forEach(btn => btn.classList.remove('seleccionado'));
+            elemento.classList.add('seleccionado');
+            numeroSeleccionado = num;
+            colorSeleccionado = null;
+        }
+
+        function seleccionarColor(color, elemento) {
+            if (tabActiva !== 'color') return;
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('seleccionado'));
+            elemento.classList.add('seleccionado');
+            colorSeleccionado = color;
+            numeroSeleccionado = null;
+        }
+
+        function limpiarSelecciones() {
+            numeroSeleccionado = null;
+            colorSeleccionado = null;
+            document.querySelectorAll('.numero-btn').forEach(btn => btn.classList.remove('seleccionado'));
+            document.querySelectorAll('.color-btn').forEach(btn => btn.classList.remove('seleccionado'));
+        }
+
+        function limpiarApuestas() {
+            limpiarSelecciones();
+            document.getElementById('resultado').classList.remove('mostrar', 'ganador', 'perdedor');
+            document.getElementById('numero-ganador').textContent = '';
+        }
+
+        function actualizarBalance(nuevoBalance) {
+            balance = nuevoBalance;
+            document.getElementById('balance').textContent = balance.toFixed(2) + '€';
+        }
+
+        function girarRuleta() {
+            if (girando) return;
+
+            if (fichaSeleccionada > balance) {
+                alert('No tens prou balanç per aquesta aposta');
+                return;
+            }
+
+            if (tabActiva === 'numero' && numeroSeleccionado === null) {
+                alert('Si us plau selecciona un número');
+                return;
+            }
+
+            if (tabActiva === 'color' && colorSeleccionado === null) {
+                alert('Si us plau selecciona un color');
+                return;
+            }
+
+            // Si és la tirada 10, mostrar pregunta abans de girar
+            if (contadorTiradas === 9) {
+                mostrarPreguntaTest();
+                return;
+            }
+
+            girando = true;
+            document.getElementById('btn-girar').disabled = true;
+            document.getElementById('resultado').classList.remove('mostrar', 'ganador', 'perdedor');
+            document.getElementById('numero-ganador').textContent = '';
+
+            contadorTiradas++;
+            document.getElementById('tiradas').textContent = contadorTiradas;
+
+            actualizarBalance(balance - fichaSeleccionada);
+
+            fetch('/girar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tipo_apuesta: tabActiva,
+                    valor_apuesta: tabActiva === 'numero' ? numeroSeleccionado : colorSeleccionado,
+                    ficha: fichaSeleccionada,
+                    numero_tirada: contadorTiradas
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const numeroGanador = data.numero;
+                const colorGanador = data.color;
+                
+                const ruleta = document.getElementById('ruleta');
+                const vueltas = 5 + Math.random() * 3;
+                const anguloFinal = vueltas * 360;
+
+                ruleta.style.transform = `rotate(${anguloFinal}deg)`;
+
+                setTimeout(() => {
+                    document.getElementById('numero-ganador').textContent = numeroGanador;
+                    procesarResultadoPython(numeroGanador, colorGanador, data.ganancia_euros);
+                }, 4000);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error en girar la ruleta');
+                girando = false;
+                document.getElementById('btn-girar').disabled = false;
+            });
+        }
+
+        function procesarResultadoPython(numeroGanador, colorGanador, gananciaEuros) {
+            let mensaje = '';
+            let esGanador = gananciaEuros > 0;
+
+            if (tabActiva === 'numero') {
+                if (esGanador) {
+                    mensaje = `🎉 HAS GUANYAT! 🎉<br><br>Número guanyador: <strong>${numeroGanador}</strong><br>Has guanyat <strong>${gananciaEuros.toFixed(2)}€</strong>`;
+                } else {
+                    mensaje = `😔 Has perdut<br><br>Número guanyador: <strong>${numeroGanador}</strong> (${getTextoColor(colorGanador)})<br>La teva aposta: <strong>${numeroSeleccionado}</strong>`;
+                }
+            } else if (tabActiva === 'color') {
+                if (esGanador) {
+                    mensaje = `🎉 HAS GUANYAT! 🎉<br><br>Número guanyador: <strong>${numeroGanador}</strong> (${getTextoColor(colorGanador)})<br>Has guanyat <strong>${gananciaEuros.toFixed(2)}€</strong>`;
+                } else {
+                    mensaje = `😔 Has perdut<br><br>Número guanyador: <strong>${numeroGanador}</strong> (${getTextoColor(colorGanador)})<br>La teva aposta: ${getTextoColor(colorSeleccionado)}`;
+                }
+            }
+
+            if (gananciaEuros > 0) {
+                actualizarBalance(balance + gananciaEuros);
+            }
+
+            const resultado = document.getElementById('resultado');
+            resultado.innerHTML = mensaje;
+            resultado.classList.add('mostrar');
+            resultado.classList.add(esGanador ? 'ganador' : 'perdedor');
+
+            girando = false;
+            
+            // Si és la tirada 10, acabar el joc i mostrar pantalla final
+            if (contadorTiradas === 10) {
+                setTimeout(() => {
+                    mostrarPantallaFinal(numeroGanador, colorGanador);
+                }, 2000);
+            } else {
+                document.getElementById('btn-girar').disabled = false;
+            }
+
+            if (balance === 0 && contadorTiradas < 10) {
+                setTimeout(() => {
+                    alert('T\'has quedat sense balanç! Et donem 50€ més per continuar jugant');
+                    actualizarBalance(50);
+                }, 1000);
+            }
+        }
+
+        function mostrarPreguntaTest() {
+            document.getElementById('modal-pregunta').classList.add('mostrar');
+        }
+
+        function responderPregunta(opcion) {
+            window.respuestaUsuario = opcion;
+            document.getElementById('modal-pregunta').classList.remove('mostrar');
+            
+            const textoRespuesta = {
+                'a': 'Tornarà a sortir vermell, estic en ratxa!',
+                'b': 'Ja toca negre, segur',
+                'c': 'Tenen exactament la mateixa probabilitat',
+                'd': 'Sorpresa! Segur que surt verd'
+            };
+            window.textoRespuestaUsuario = textoRespuesta[opcion] || opcion;
+            
+            continuarGiroTirada10();
+        }
+
+        function continuarGiroTirada10() {
+            girando = true;
+            document.getElementById('btn-girar').disabled = true;
+            document.getElementById('resultado').classList.remove('mostrar', 'ganador', 'perdedor');
+            document.getElementById('numero-ganador').textContent = '';
+
+            contadorTiradas++;
+            document.getElementById('tiradas').textContent = contadorTiradas;
+
+            actualizarBalance(balance - fichaSeleccionada);
+
+            fetch('/girar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tipo_apuesta: tabActiva,
+                    valor_apuesta: tabActiva === 'numero' ? numeroSeleccionado : colorSeleccionado,
+                    ficha: fichaSeleccionada,
+                    numero_tirada: contadorTiradas
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const numeroGanador = data.numero;
+                const colorGanador = data.color;
+                
+                const ruleta = document.getElementById('ruleta');
+                const vueltas = 5 + Math.random() * 3;
+                const anguloFinal = vueltas * 360;
+
+                ruleta.style.transform = `rotate(${anguloFinal}deg)`;
+
+                setTimeout(() => {
+                    document.getElementById('numero-ganador').textContent = numeroGanador;
+                    procesarResultadoPython(numeroGanador, colorGanador, data.ganancia_euros);
+                }, 4000);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error en girar la ruleta');
+                girando = false;
+                document.getElementById('btn-girar').disabled = false;
+            });
+        }
+
+        function getTextoColor(color) {
+            if (color === 'vermell') return '🔴 VERMELL';
+            if (color === 'negre') return '⚫ NEGRE';
+            if (color === 'verd') return '🟢 VERD';
+        }
+
+        function mostrarPantallaFinal(numeroFinal, colorFinal) {
+            const infoFinal = document.getElementById('info-final');
+            infoFinal.innerHTML = `
+                <div class="dato-final">
+                    <p class="etiqueta">Has escollit la opció:</p>
+                    <p class="valor destacado">${window.respuestaUsuario ? window.respuestaUsuario.toUpperCase() : 'No has respost'}</p>
+                </div>
+                <div class="dato-final">
+                    <p class="etiqueta">La teva resposta:</p>
+                    <p class="valor">${window.textoRespuestaUsuario || 'No has respost'}</p>
+                </div>
+                <div class="dato-final">
+                    <p class="etiqueta">Resultat tirada 10:</p>
+                    <p class="valor destacado">${numeroFinal} - ${getTextoColor(colorFinal)}</p>
+                </div>
+            `;
+            document.getElementById('pantalla-final').classList.add('mostrar');
+        }
+
+        crearRuleta();
+        crearGridNumeros();
+    </script>
+</body>
+</html>
